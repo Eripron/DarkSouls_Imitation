@@ -21,6 +21,11 @@ namespace Game
         [Range(1.0f, 10.0f)]
         private float _fGravity;
 
+        // CapsuleCollider.direction: 0=X, 1=Y, 2=Z (Unity 공식 문서 기준)
+        [SerializeField] 
+        private float _fSkinWidth = 0.01f;
+        private Vector3[] _colliderDirection = { Vector3.right, Vector3.up, Vector3.forward };
+
         private Transform _transform;
         private InputAction _inputMove;
         private CapsuleCollider _collider;
@@ -54,15 +59,33 @@ namespace Game
             }
         }
 
+        
+
         /// <summary>
-        /// 
+        /// 이동 방향으로 CapsuleCollider를 미리 계산해서 벽 등에 충돌하는지 확인 후 충돌한다면 그 만큼 내부로 이동
         /// </summary>
         /// <param name="vMovePosition"></param>
-        /// <returns></returns>
-        private Vector3 CheckCollider(Vector3 vMovePosition)
+        /// <returns></returns>\
+        private Vector3 CheckPlayerCollision(Vector3 vMovePosition)
         {
+            // _collider 기준으로 캡슐의 두 구체 중심 계산
+            Vector3 vCenterWorld = _transform.TransformPoint(_collider.center);
+            Vector3 vColliderDir = _transform.TransformDirection(_colliderDirection[_collider.direction]);
 
-            return Vector3.zero;
+            float fHalfHeight = Mathf.Max(0f, _collider.height / 2f - _collider.radius);
+            Vector3 vPoint1 = vCenterWorld + vColliderDir * fHalfHeight;
+            Vector3 vPoint2 = vCenterWorld - vColliderDir * fHalfHeight;
+
+            float fDistance = vMovePosition.magnitude;
+            Vector3 vDir = vMovePosition.normalized;
+
+            if (Physics.CapsuleCast(vPoint1, vPoint2, _collider.radius, vDir, out RaycastHit hit, fDistance, _collider.includeLayers))
+            {
+                // skinWidth 여백을 두어 벽 표면에 완전히 닿지 않도록 함
+                return vDir * Mathf.Max(0f, hit.distance - _fSkinWidth);
+            }
+
+            return vMovePosition;
         }
 
         /// <summary>
@@ -81,9 +104,10 @@ namespace Game
 
         private void UpdatePlayerPosition(Vector3 vMoveDir)
         {
-            Vector3 vMove = vMoveDir * _fMoveSpeed * Time.deltaTime;
+            Vector3 vMovePosition = vMoveDir * _fMoveSpeed * Time.deltaTime;
+            vMovePosition = CheckPlayerCollision(vMovePosition);
 
-            SetPosition(GetPosition() + vMove);
+            SetPosition(GetPosition() + vMovePosition);
         }
 
         /// <summary>
