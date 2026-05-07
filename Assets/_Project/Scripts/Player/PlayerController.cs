@@ -23,7 +23,7 @@ namespace Game
 
         // CapsuleCollider.direction: 0=X, 1=Y, 2=Z (Unity 공식 문서 기준)
         [SerializeField] 
-        private float _fSkinWidth = 0.01f;
+        private float _fSkinWidth = 0.08f;
         private Vector3[] _colliderDirection = { Vector3.right, Vector3.up, Vector3.forward };
 
         private Transform _transform;
@@ -43,11 +43,6 @@ namespace Game
 
         private void Update()
         {
-            // if(_bIsGround)
-            //     _fVerticalSpeed = 0.0f;
-            // else
-            //     _fVerticalSpeed += -_fGravity * Time.deltaTime;
-
             Vector2 vInputMove = _inputMove.ReadValue<Vector2>().normalized;
 
             if(vInputMove != Vector2.zero)
@@ -59,55 +54,61 @@ namespace Game
             }
         }
 
+        /// <summary>
+        /// 유저 입력에 대한 이동 방향 계산
+        /// </summary>
+        /// <param name="vInputMove"></param>
+        /// <returns></returns>
+        private Vector3 CalaulateMoveDir(Vector2 vInputMove)
+        {
+            Vector3 vMoveDir = (_camera.GetForward() * vInputMove.y) + (_camera.GetRight() * vInputMove.x);
+            vMoveDir.y = 0.0f;
+            vMoveDir.Normalize();
+
+            return vMoveDir;
+        }
         
+        private void UpdatePlayerPosition(Vector3 vMoveDir)
+        {
+            // 이동 위치
+            Vector3 vMovePosition = vMoveDir * _fMoveSpeed * Time.deltaTime;
+            vMovePosition = CheckPlayerCollision(vMovePosition);
+
+            SetPosition(GetPosition() + vMovePosition);
+        }
 
         /// <summary>
-        /// 이동 방향으로 CapsuleCollider를 미리 계산해서 벽 등에 충돌하는지 확인 후 충돌한다면 그 만큼 내부로 이동
+        /// 벽과 충돌 처리 및 최종 이동 위치 계산
         /// </summary>
         /// <param name="vMovePosition"></param>
         /// <returns></returns>\
         private Vector3 CheckPlayerCollision(Vector3 vMovePosition)
         {
             // _collider 기준으로 캡슐의 두 구체 중심 계산
-            Vector3 vCenterWorld = _transform.TransformPoint(_collider.center);
+            Vector3 vColliderCenterWorld = _transform.TransformPoint(_collider.center);
             Vector3 vColliderDir = _transform.TransformDirection(_colliderDirection[_collider.direction]);
 
             float fHalfHeight = Mathf.Max(0f, _collider.height / 2f - _collider.radius);
-            Vector3 vPoint1 = vCenterWorld + vColliderDir * fHalfHeight;
-            Vector3 vPoint2 = vCenterWorld - vColliderDir * fHalfHeight;
+            Vector3 vWorldPoint1 = vColliderCenterWorld + vColliderDir * fHalfHeight;
+            Vector3 vWorldPoint2 = vColliderCenterWorld - vColliderDir * fHalfHeight;
 
-            float fDistance = vMovePosition.magnitude;
-            Vector3 vDir = vMovePosition.normalized;
+            Vector3 vMoveDir = vMovePosition.normalized;    // 이동 방향
+            float fMoveDistance = vMovePosition.magnitude;  // 이동 거리
 
-            if (Physics.CapsuleCast(vPoint1, vPoint2, _collider.radius, vDir, out RaycastHit hit, fDistance, _collider.includeLayers))
+            if (Physics.CapsuleCast(vWorldPoint1, vWorldPoint2, _collider.radius, vMoveDir, 
+                out RaycastHit hit, fMoveDistance, _collider.includeLayers))
             {
-                // skinWidth 여백을 두어 벽 표면에 완전히 닿지 않도록 함
-                return vDir * Mathf.Max(0f, hit.distance - _fSkinWidth);
+                // 벽까지 이동 가능한 거리 계산 (skinWidth 여유)
+                float fMovable = Mathf.Max(0f, hit.distance - _fSkinWidth);
+
+                // 남은 이동 거리를 벽면에 투영해서 슬라이딩
+                float fRemaining = fMoveDistance - fMovable;
+                Vector3 vSlide = Vector3.ProjectOnPlane(vMoveDir, hit.normal) * fRemaining;
+
+                return fMovable * vMoveDir + vSlide;
             }
 
             return vMovePosition;
-        }
-
-        /// <summary>
-        /// 유저 입력에 대한 이동 방향 계산
-        /// </summary>
-        /// <param name="vInputMoveDir"></param>
-        /// <returns></returns>
-        private Vector3 CalaulateMoveDir(Vector2 vInputMoveDir)
-        {
-           Vector3 vMoveDir = (_camera.GetForward() * vInputMoveDir.y) + (_camera.GetRight() * vInputMoveDir.x);
-            vMoveDir.y = 0.0f;
-            vMoveDir.Normalize();
-
-            return vMoveDir;
-        }
-
-        private void UpdatePlayerPosition(Vector3 vMoveDir)
-        {
-            Vector3 vMovePosition = vMoveDir * _fMoveSpeed * Time.deltaTime;
-            vMovePosition = CheckPlayerCollision(vMovePosition);
-
-            SetPosition(GetPosition() + vMovePosition);
         }
 
         /// <summary>
